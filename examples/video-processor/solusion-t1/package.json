@@ -12,9 +12,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@tensorflow-models/deeplab": "^0.2.2",
+    "@tensorflow/tfjs": "^3.19.0",
     "onnxruntime-web": "^1.20.1",
     "react-dom": "^19.0.0",
-    "react-scripts": "^5.0.1"
+    "react-scripts": "^3.0.1"
   },
   "browserslist": {
     "production": [

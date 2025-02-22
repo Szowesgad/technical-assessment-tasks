@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { Mask } from '@/types';
 
 interface VideoProcessorProps {
   videoFile: File;
@@ -14,13 +15,7 @@ interface ProcessedVideoData {
     width: number;
     height: number;
   };
-}
-
-interface Mask {
-    data: Uint8Array;  // lub inna struktura przechowująca maskę
-    width: number;
-    height: number;
-  }
+};
   
 interface FrameData {
   id: string;
