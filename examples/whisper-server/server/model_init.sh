@@ -5,7 +5,7 @@
 #   2. Verifies that Node.js version is 18.x
 #   3. Creates required directories: uploads, models, build
 #   4. Interactively selects a whisper model to download with size verification
-#   5. Optionally clones, builds, and installs whisper.cpp (placing the binary in models)
+#   5. Builds and installs whisper.cpp with proper dylib handling
 
 # ---------------------
 # Color settings for messages
@@ -27,6 +27,12 @@ warn_msg() {
 
 success_msg() {
     echo -e "${GREEN}✅ $1${NC}"
+}
+
+debug_msg() {
+    if [ "${DEBUG:-false}" = "true" ]; then
+        echo -e "🔍 Debug: $1"
+    fi
 }
 
 # ---------------------
@@ -138,11 +144,41 @@ validate_model() {
 }
 
 # ---------------------
-# Function to clone, compile, and install whisper.cpp
+# Function to handle dynamic library copying and fixing
+handle_dylibs() {
+    local binary_path="$1"
+    local models_dir="$2"
+    local build_dir="$3"
+
+    # Find all dylibs in the build directory
+    local dylibs
+    while IFS= read -r dylib; do
+        debug_msg "Found dylib: $dylib"
+        local dylib_name
+        dylib_name=$(basename "$dylib")
+        cp "$dylib" "$models_dir/" || error_exit "Failed to copy $dylib_name"
+        success_msg "Copied $dylib_name to models directory"
+    done < <(find "$build_dir" -name "*.dylib")
+
+    # Fix binary's rpath
+    install_name_tool -add_rpath "@executable_path" "$binary_path" || \
+        warn_msg "Failed to add @executable_path to rpath"
+    success_msg "Updated binary rpath"
+
+    # Check if otool is available (macOS)
+    if command -v otool >/dev/null 2>&1; then
+        debug_msg "Running otool -L on binary:"
+        otool -L "$binary_path"
+    fi
+}
+
+# ---------------------
+# Function to build whisper.cpp with proper dylib handling
 build_whisper() {
     local repo_url="https://github.com/ggerganov/whisper.cpp.git"
     local temp_dir="temp_whisper"
-    local target_build_dir="build"  # docelowy katalog build w projekcie
+    local target_build_dir="build"
+    local models_dir="models"
 
     if [ -d "$temp_dir" ]; then
         warn_msg "Temporary directory $temp_dir already exists."
@@ -166,28 +202,31 @@ build_whisper() {
 
     cd .. || error_exit "Failed to return to project directory"
     
-    # Przeniesienie folderu build z temp_whisper do docelowego katalogu build
+    # Copy build directory
     echo "Copying build directory to target location..."
-    # Usuń istniejący target_build_dir, jeśli istnieje
     if [ -d "$target_build_dir" ]; then
         rm -rf "$target_build_dir"
     fi
     cp -r "$temp_dir/build" "$target_build_dir" || error_exit "Failed to copy build directory."
     success_msg "Build directory successfully copied to '$target_build_dir'."
     
-    # Dodatkowo, jeśli potrzebujemy skopiować konkretny binary do katalogu models:
+    # Find and copy the binary
     local binary_path=""
     if [ -f "$temp_dir/build/whisper" ]; then
         binary_path="$temp_dir/build/whisper"
     elif [ -f "$temp_dir/build/bin/whisper-cli" ]; then
         binary_path="$temp_dir/build/bin/whisper-cli"
     fi
+
     if [ -n "$binary_path" ]; then
-        echo "Copying compiled binary to models directory..."
-        cp "$binary_path" models/ || error_exit "Failed to copy compiled binary."
-        success_msg "Compiled whisper binary is now located in 'models'."
+        echo "Copying and configuring whisper binary..."
+        cp "$binary_path" "$models_dir/whisper-cli" || error_exit "Failed to copy binary."
+        success_msg "Copied whisper binary to models/whisper-cli"
+        
+        # Handle dylibs for the binary
+        handle_dylibs "$models_dir/whisper-cli" "$models_dir" "$temp_dir/build"
     else
-        warn_msg "Compiled binary not found in expected locations; skipping binary copy."
+        error_exit "Compiled binary not found in expected locations."
     fi
 
     # Clean up temporary directory
@@ -205,6 +244,12 @@ check_command curl
 check_command git
 check_command cmake
 
+# Check for essential build tools on macOS
+if [[ "$(uname)" == "Darwin" ]]; then
+    check_command install_name_tool
+    check_command otool
+fi
+
 echo "🔍 Verifying Node.js version..."
 verify_node_version
 
@@ -221,7 +266,7 @@ read -p "Do you want to compile whisper.cpp? (This will clone the repository, bu
 if [[ "$build_choice" =~ ^[Yy] ]]; then
     build_whisper
 else
-    warn_msg "whisper.cpp compilation skipped. Ensure that the required binary is placed in 'models'."
+    warn_msg "whisper.cpp compilation skipped. Ensure that the required binary and libraries are placed in 'models'."
 fi
 
 echo -e "${GREEN}Model initialization completed successfully.${NC}"

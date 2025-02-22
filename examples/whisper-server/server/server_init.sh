@@ -5,6 +5,8 @@
 #   2. Installs server dependencies using pnpm
 #   3. Starts the server in development mode
 
+# Note: Requires Node.js >=14.0.0 as per package.json
+
 # ---------------------
 # Color settings for messages
 RED='\033[0;31m'
@@ -39,10 +41,6 @@ check_command() {
 echo "🔍 Checking prerequisites..."
 check_command node
 check_command pnpm
-
-# Optionally verify Node.js version if needed
-version=$(node --version | cut -d'v' -f2)
-echo "Node.js version $version verified."
 
 echo "🚀 Installing server dependencies using pnpm..."
 pnpm install || error_exit "Failed to install server dependencies."

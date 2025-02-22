@@ -3,9 +3,9 @@ import cors from 'cors';
 import multer from 'multer';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { TranscriptionOptions } from './types/whisper';
-import { nodewhisper } from 'nodejs-whisper';
+import { transcribe, WhisperOptions } from './utils/whisper';
 import { getPath } from './utils/paths';
+import { WHISPER_CONFIG, validateWhisperSetup } from './config/whisper';
 import { createValidationError, createTranscriptionError, createFileSystemError } from './utils/errors';
 import type { 
   APIResult,
@@ -24,12 +24,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type']
 }));
 
-// Directory constants
-const SERVER_ROOT = path.resolve(__dirname, '..');
-const MODEL_FILE = 'ggml-large-v3-turbo.bin';
-const UPLOADS_DIR = path.join(SERVER_ROOT, 'uploads');
-const MODEL_PATH = path.join(SERVER_ROOT, 'models', MODEL_FILE);
-const BINARY_PATH = path.join(SERVER_ROOT, 'build', 'bin', 'whisper-cli');
+const UPLOADS_DIR = getPath('uploads');
 
 const ensureDirectoryExists = async (dir: string) => {
   try {
@@ -39,33 +34,45 @@ const ensureDirectoryExists = async (dir: string) => {
   }
 };
 
+// File filter function for multer
+const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimes = [
+    'audio/wav',
+    'audio/x-wav',
+    'audio/mp3',
+    'audio/mpeg',
+    'audio/m4a',
+    'audio/mp4',
+    'audio/x-m4a',
+    'audio/x-hx-aac-adts'
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Invalid file type. Allowed types: ${allowedMimes.join(', ')}`));
+  }
+};
+
 const storage = multer.diskStorage({
   destination: async function (req, file, cb) {
     await ensureDirectoryExists(UPLOADS_DIR);
     cb(null, UPLOADS_DIR);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
+    // Keep original extension
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}${ext}`);
   }
 });
 
-const upload = multer({ storage: storage });
-
-const initializeModel = async () => {
-  try {
-    await fs.access(MODEL_PATH);
-    console.log(`✅ Model file found at: ${MODEL_PATH}`);
-    
-    await fs.access(BINARY_PATH);
-    console.log(`✅ Whisper binary found at: ${BINARY_PATH}`);
-  } catch (error) {
-    console.error('❌ Error checking model/binary:', error);
-    console.error(`Please ensure:
-    1. Model file exists at: ${MODEL_PATH}
-    2. Whisper binary exists at: ${BINARY_PATH}`);
-    process.exit(1);
-  }
-};
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter
+  // limits: { // <--- Usuń cały ten blok limits
+  //   fileSize: 50 * 1024 * 1024 // 50MB limit
+  // }
+});
 
 const cleanupUpload = async (filePath: string) => {
   try {
@@ -73,6 +80,26 @@ const cleanupUpload = async (filePath: string) => {
   } catch (error) {
     console.error('Warning: Failed to cleanup uploaded file:', error);
     throw createFileSystemError('delete', filePath, (error as Error).message);
+  }
+};
+
+const validateUploadedFile = async (filePath: string) => {
+  try {
+    const stats = await fs.stat(filePath);
+    console.log(`📁 Uploaded file stats:
+      - Size: ${stats.size} bytes
+      - Created: ${stats.birthtime}
+      - Path: ${filePath}
+    `);
+    
+    if (stats.size === 0) {
+      throw new Error('Uploaded file is empty');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ File validation error:', error);
+    throw error;
   }
 };
 
@@ -87,16 +114,31 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   }
 
   try {
-    const options: TranscriptionOptions = {
-      modelName: MODEL_FILE.replace('.bin', ''),
-      language: req.body.language || 'pl',
-      task: req.body.task || 'transcribe',
-      timestamps: true,
-      word_timestamps: true,
-      binary_path: BINARY_PATH
+    // Validate uploaded file
+    await validateUploadedFile(req.file.path);
+
+    console.log(`🎵 Processing audio file:
+      - Original name: ${req.file.originalname}
+      - Mime type: ${req.file.mimetype}
+      - Size: ${req.file.size} bytes
+      - Saved as: ${req.file.filename}
+    `);
+
+    const whisperOptions: WhisperOptions = {
+      modelPath: WHISPER_CONFIG.model.path,
+      binaryPath: path.join(WHISPER_CONFIG.binary.path, WHISPER_CONFIG.binary.name),
+      language: req.body.language || WHISPER_CONFIG.defaultOptions.language,
+      task: req.body.task || WHISPER_CONFIG.defaultOptions.task,
+      format: req.body.format || WHISPER_CONFIG.defaultOptions.format,
+      timestamps: WHISPER_CONFIG.defaultOptions.timestamps,
+      word_timestamps: WHISPER_CONFIG.defaultOptions.word_timestamps
     };
 
-    const transcript: string = await nodewhisper(req.file.path, options);
+    console.log('🔄 Starting transcription with options:', whisperOptions);
+
+    const transcript = await transcribe(req.file.path, whisperOptions);
+    console.log('✅ Transcription completed successfully');
+
     const response: APIResult<TranscriptionResponse> = {
       success: true,
       data: {
@@ -120,7 +162,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
       success: false,
       error: createTranscriptionError((error as Error).message, {
         audioFile: req.file?.originalname,
-        modelName: MODEL_FILE
+        modelName: WHISPER_CONFIG.model.name
       })
     };
     res.status(500).json(response);
@@ -131,9 +173,9 @@ app.get('/health', (req, res) => {
   const response: HealthCheckResponse = {
     status: 'ok',
     uploadDir: UPLOADS_DIR,
-    modelPath: MODEL_PATH,
-    binaryPath: BINARY_PATH, 
-    modelName: MODEL_FILE,
+    modelPath: WHISPER_CONFIG.model.path,
+    binaryPath: path.join(WHISPER_CONFIG.binary.path, WHISPER_CONFIG.binary.name),
+    modelName: WHISPER_CONFIG.model.name,
     model: 'ready'
   };
   res.json(response);
@@ -141,12 +183,12 @@ app.get('/health', (req, res) => {
 
 const start = async () => {
   await ensureDirectoryExists(UPLOADS_DIR);
-  await initializeModel();
+  await validateWhisperSetup();
   app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server running at http://0.0.0.0:${port}`);
     console.log(`📁 Using uploads directory: ${UPLOADS_DIR}`);
-    console.log(`🧠 Using model file: ${MODEL_PATH}`);
-    console.log(`⚙️  Using whisper binary: ${BINARY_PATH}`);
+    console.log(`🧠 Using model file: ${WHISPER_CONFIG.model.path}`);
+    console.log(`⚙️  Using whisper binary: ${path.join(WHISPER_CONFIG.binary.path, WHISPER_CONFIG.binary.name)}`);
   });
 };
 
