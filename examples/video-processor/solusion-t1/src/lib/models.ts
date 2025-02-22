@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { load as loadDeepLab } from '@tensorflow-models/deeplab';
-import { FrameData, Mask } from '@/types';
+import { FrameData, Mask } from '../types';
 
 export interface ModelConfig {
   type: 'SAM2' | 'other';

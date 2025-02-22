@@ -1,4 +1,4 @@
-import { FrameData } from '@/types';
+import { FrameData } from '../types';
 
 export const extractFrames = async (videoFile: File): Promise<FrameData[]> => {
     console.log(`Extracting frames from video: ${videoFile.name}`);

@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { Mask } from '@/types';
+import App from 'App';
+import { createRoot } from 'react-dom/client';
+import type { Mask } from 'types';
+
+const container = document.getElementById('root');
+if (container) {
+  const root = createRoot(container);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
 
 interface VideoProcessorProps {
   videoFile: File;
@@ -15,8 +27,8 @@ interface ProcessedVideoData {
     width: number;
     height: number;
   };
-};
-  
+}
+
 interface FrameData {
   id: string;
   timestamp: number;
@@ -32,7 +44,7 @@ export type { FrameData };
 export const VideoProcessor: React.FC<VideoProcessorProps> = ({
   videoFile,
   onProcessingComplete,
-  onError
+  onError,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,11 +57,11 @@ export const VideoProcessor: React.FC<VideoProcessorProps> = ({
       try {
         setIsProcessing(true);
 
-        // Create video URL
+        // Utworzenie URL dla wideo
         const videoUrl = URL.createObjectURL(videoFile);
         videoRef.current.src = videoUrl;
 
-        // Wait for video metadata
+        // Czekamy na metadane wideo
         await new Promise<void>((resolve) => {
           if (!videoRef.current) return;
           videoRef.current.onloadedmetadata = () => resolve();
@@ -57,12 +69,12 @@ export const VideoProcessor: React.FC<VideoProcessorProps> = ({
 
         const { videoWidth, videoHeight, duration } = videoRef.current;
 
-        // Calculate processing resolution (downsample to 720p if larger)
+        // Obliczenie rozdzielczości do przetwarzania (zmniejszenie do 720p, jeśli większe)
         const processingScale = Math.min(1, 720 / Math.max(videoWidth, videoHeight));
         const processingWidth = Math.round(videoWidth * processingScale);
         const processingHeight = Math.round(videoHeight * processingScale);
 
-        // Process frames
+        // Przetwarzanie klatek
         const frames: FrameData[] = [];
         const frameInterval = 1 / 30; // 30 fps
         
@@ -73,45 +85,43 @@ export const VideoProcessor: React.FC<VideoProcessorProps> = ({
             videoRef.current.onseeked = () => resolve();
           });
 
-          // Draw frame to canvas at processing resolution
+          // Rysowanie klatki na canvas przy ustalonej rozdzielczości
           canvasRef.current.width = processingWidth;
           canvasRef.current.height = processingHeight;
           const ctx = canvasRef.current.getContext('2d');
           ctx?.drawImage(videoRef.current, 0, 0, processingWidth, processingHeight);
 
-          // Get frame data for processing
+          // Pobieranie danych obrazu z canvas
           const imageData = ctx?.getImageData(0, 0, processingWidth, processingHeight);
           if (!imageData) continue;
 
-          // TODO: Process frame through ML model
-          // This is where you'd call your chosen segmentation model
-          
-          // For now, just create a thumbnail
+          // TODO: Przetwarzanie klatki przy użyciu modelu ML (np. segmentacja)
+          // Na razie tworzymy tylko miniaturkę
           const thumbnail = canvasRef.current.toDataURL('image/jpeg', 0.5);
 
           frames.push({
             id: `frame-${time.toFixed(3)}`,
             timestamp: time,
             segmentation: {
-              masks: [],  // Would be populated by ML model
-              labels: [], // Would be populated by ML model
-              confidence: []
+              masks: [],  // Wypełnione przez model ML
+              labels: [], // Wypełnione przez model ML
+              confidence: [],
             },
-            thumbnail
+            thumbnail,
           });
         }
 
-        // Cleanup
+        // Czyszczenie URL
         URL.revokeObjectURL(videoUrl);
 
-        // Return results
+        // Zwracamy wyniki przetwarzania
         const processedData: ProcessedVideoData = {
           frames,
           duration,
           resolution: {
             width: videoWidth,
-            height: videoHeight
-          }
+            height: videoHeight,
+          },
         };
 
         onProcessingComplete?.(processedData);

@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { FrameData } from '@/components/VideoProcessor';
-
+import { FrameData } from '../../components/VideoProcessor';
 interface Point {
   x: number;
   y: number;

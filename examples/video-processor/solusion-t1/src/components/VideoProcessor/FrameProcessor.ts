@@ -1,5 +1,5 @@
 import * as ort from "onnxruntime-web"; // Import ONNX Runtime
-import { FrameData } from "@/types";
+import { FrameData } from "types";
 
 class FrameProcessor {
   private model: ort.InferenceSession | null = null;

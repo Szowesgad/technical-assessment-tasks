@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FrameData } from '@/components/VideoProcessor';
+import { FrameData } from '../components/VideoProcessor';
 
 export const useVideoProcessing = () => {
   const [processedFrames, setProcessedFrames] = useState<FrameData[]>([]);

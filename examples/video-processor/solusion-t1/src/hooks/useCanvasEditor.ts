@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Mask } from '@/types';
+import type { Mask } from '../types';
 
 export const useCanvasEditor = () => {
   const [masks, setMasks] = useState<Mask[]>([]);

@@ -7,6 +7,8 @@ export interface Mask {
     id: string;
     points: Point[];
     color: string;
+    width?: number;
+    height?: number;
   }
   
 export interface FrameData {

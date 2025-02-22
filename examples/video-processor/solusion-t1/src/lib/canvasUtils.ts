@@ -1,4 +1,4 @@
-import { Mask, Point } from '@/types';
+import { Mask, Point } from '../types';
 
 export const drawMask = (ctx: CanvasRenderingContext2D, mask: Mask): void => {
   ctx.beginPath();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FrameData } from '@/components/VideoProcessor';
+import { FrameData } from '../VideoProcessor';
 
 interface FilmrollProps {
   frames: FrameData[];
