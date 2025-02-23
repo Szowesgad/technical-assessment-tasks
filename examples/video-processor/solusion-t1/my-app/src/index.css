@@ -1,0 +1,21 @@
+body {
+	margin: 0;
+	padding: 0;
+	background-color: #282c34;
+	color: #d98181;
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-container {
+	text-align: center;
+	padding: 20px;
+}
+
+input[type='file'] {
+	margin: 20px 0;
+	padding: 10px;
+	background-color: #61dafb;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+}
